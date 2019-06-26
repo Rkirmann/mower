@@ -1,7 +1,7 @@
 //////////Pins/////////////////////
 //measure
 #define voltPin A0
-#define lowVoltPin A1
+#define ledPin A1
 #define currentPin A2
 #define currentPin2 A3
 //
@@ -33,6 +33,7 @@ unsigned long amptime = millis();
 unsigned long time = millis();
 unsigned long mowertime = millis();
 unsigned long gotime = millis();
+unsigned long gpsblink = millis();
 //////////TIME/////////////////////
 
 ////////////////////////  geofence  ////////////////////////////////////////
@@ -174,7 +175,7 @@ void setup() {
   /////////////motor/////////////////////////////////////
   //pinMode(A1, INPUT);
   pinMode(voltPin, INPUT);
-  pinMode(lowVoltPin, OUTPUT);
+  pinMode(ledPin, OUTPUT);
   pinMode(currentPin, INPUT);
   pinMode(currentPin2, INPUT);
   
@@ -241,13 +242,13 @@ void loop()
     if (current2 > 2 && millis()-mowertime > 2000){               
         digitalWrite(cutter, LOW);
         mowertime = millis();
-        digitalWrite(lowVoltPin, HIGH);
+        
     }
     
     if (digitalRead(cutter) == LOW && millis() - mowertime > 5000 && start == true){
       digitalWrite(cutter, HIGH);
       mowertime = millis();
-      digitalWrite(lowVoltPin, LOW);
+      digitalWrite(ledPin, LOW);
     }
   
 
@@ -313,18 +314,22 @@ void getCoords(){
     fix = gps.read();
     //fence
     getFence();         //kasuta getCoords geofence arvutamiseks    
-    Serial.println(inFence);
+    //Serial.println(inFence);
     //fence
-    DEBUG_PORT.print( F("Location: ") );
+    //DEBUG_PORT.print( F("Location: ") );
     if (fix.valid.location)
     {
+      digitalWrite(ledPin, HIGH);
       y = (fix.latitudeL()); // integer displayco
       //Blynk.virtualWrite(V0, y);
-      DEBUG_PORT.print(y);
-      DEBUG_PORT.print( ',' );
+      //DEBUG_PORT.print(y);
+      //DEBUG_PORT.print( ',' );
       x = (fix.longitudeL()); // integer display
       //Blynk.virtualWrite(V1, x);
-      DEBUG_PORT.println(x);
+      //DEBUG_PORT.println(x);
+    }
+    if(millis() - gpsblink > 500){
+      digitalWrite(ledPin, LOW);
     }
     /* 
     if (fix.valid.speed) {
@@ -388,20 +393,24 @@ void testcurrent (){
   if (current > 1 && millis() - amptime > 1000 && highcurrent == true){
       avoidcurrent = true;
   }
-}
+}//test current
+
+
 
 void moveRobot(){
   
   testcurrent();
   //Serial.println(current);
 
-  if (distance > 19 && avoid == false /* && inFence == 1 */ &&  avoidcurrent == false) {
+//all ok movement
+  if (distance > 19 && avoid == false  && inFence == 1  &&  avoidcurrent == false) {
     direction = 1;
     drive();
   }
 
 // fence trigger
-  else if (distance > 19 /* && inFence == 0 */ &&  avoidcurrent == false){
+ 
+  else if (inFence == 0 && avoidcurrent == false){
     if (avoid == false){
     avoid = true;
     time = millis(); //and reset time
@@ -411,38 +420,21 @@ void moveRobot(){
     {
     stop();
     }
-    if (millis() - time > 500 &&  millis() - time < 8500)
+    if (millis() - time > 500)
     { //Has 0.5 second passed?
       direction = -1;
       drive();
       testcurrent();
     }
-    if (millis() - time > 8500 && millis() - time < 9000)
-    { //Has 2 second passed?
-      stop();
-    }
-    if (millis() - time > 9000 && millis() - time < 13000)
-    { //Has 0.5 second passed?
-
-      turn();
-      testcurrent();
-    }
-    if (millis() - time > 13000 && millis() - time < 13500)
-    { //Has 2 second passed?
-      stop();
-      //time = millis();
-    }
-
-    if (millis() - time > 13500)
-    { //Has 2 second passed?
+    if (inFence == 1)
+    { 
       avoid = false;
-      avoidcurrent = false;
-      highcurrent = false;
     }
   } //if out of fence
 
+
 ///UH trigger
-  else if (distance <= 19 /* || inFence == 0 */ &&  avoidcurrent == false){
+  else if (distance <= 19  && inFence == 1  &&  avoidcurrent == false){
     if (avoid == false){
     avoid = true;
     time = millis(); //and reset time
@@ -475,8 +467,6 @@ void moveRobot(){
     if (millis() - time > 9500)
     { //Has 2 second passed?
       avoid = false;
-      avoidcurrent = false;
-      highcurrent = false;
     }
   } //if UH trigger
 
