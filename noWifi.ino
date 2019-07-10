@@ -28,12 +28,14 @@ RBD::Button startbutton(11); // input_pullup by default
 
 
 
+
+
 //////////TIME/////////////////////
-unsigned long amptime = millis();
 unsigned long time = millis();
+unsigned long amptime = millis();
 unsigned long mowertime = millis();
 unsigned long gotime = millis();
-unsigned long gpsblink = millis();
+unsigned long blinktime = millis();
 //////////TIME/////////////////////
 
 ////////////////////////  geofence  ////////////////////////////////////////
@@ -51,12 +53,15 @@ Geofence fence;
 int inFence = 0;
 int speedcount = 0;
 float avgspeed = 0;
+bool avoidfence = false;
+bool turninfence = false;
 ////////////////////////geofence////////////////////////////////////////
 
 
-//////////////////////// WHEEL MOTORS /////////////////////////////////////
-bool avoid = false;
-bool dirchange = false;
+////////////////////////  MOTORS /////////////////////////////////////
+bool resetTimer = false;
+bool resetTimer2 = false;
+bool resetTimer3 = false;
 int direction = 1;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -67,7 +72,7 @@ int direction = 1;
 #include <Ultrasonic.h>
 Ultrasonic ultrasonic(UH1, UH2);
 int distance;
-
+bool avoidUH = false;
 /////////////////////////////////Current//////////////////////////////////
 #define CURRENT_SAMPLES 10
 int currentsum = 0;                    // sum of samples taken
@@ -75,6 +80,7 @@ int currentsample_count = 0; // current sample number
 float current = 0.0;
 float current2 = 0.0;
 bool highcurrent = false;
+bool highcurrent2 = false;
 bool avoidcurrent = false;
 ///////////////////////////////////////////////////////////////////////////
 
@@ -173,12 +179,14 @@ void setup() {
     
     
   /////////////motor/////////////////////////////////////
-  //pinMode(A1, INPUT);
   pinMode(voltPin, INPUT);
   pinMode(ledPin, OUTPUT);
   pinMode(currentPin, INPUT);
   pinMode(currentPin2, INPUT);
+
+
   
+
 }
 
 
@@ -194,8 +202,11 @@ bool start = false;
 bool cutstart = false;
 void loop()
 {
-
   
+  
+
+  getDistance(); 
+  getCoords();
   addFence();
 
   //measureVoltage();      //get voltage from voltage divider r1=1Mohm, r2=100Kohm, takes 10ns
@@ -208,49 +219,54 @@ void loop()
     }
   */
 
-  //measureCurrent(A1);       //get current from 0.1ohm shunt. takes 10ns
   current = measureCurrent(currentPin);       //get current from 0.1ohm shunt. takes 10ns
   current2 = measureCurrent(currentPin2);       //get current from 0.1ohm shunt. takes 10ns
 
   //Serial.println(current);
   //Serial.println(current2);
-
-  
- 
   
   if (startbutton.onPressed()){
     gotime = millis();
     //digitalWrite(LED_BUILTIN, HIGH);
     start= true;
-    cutstart=true;
+    cutstart= true;
   }
-  getCoords();
-  getDistance(); 
+
   
   //start wheels
   if (millis() - gotime > 10000 && start==true){  
     moveRobot();         
   }
-  //start cutter
-  if (start == true && cutstart == true){
-    digitalWrite(cutter, HIGH);
-    cutstart= false;
-    mowertime = millis();
-  }
 
+  ////////////////////////////    CUTTER      /////////////////////////////////////////////////
+  
+  //start cutter
+  
+  if (cutstart == true){
+    digitalWrite(cutter, HIGH);
+    cutstart = false;
+  }
+   
+    
     //check if cutter jammed
-    if (current2 > 2 && millis()-mowertime > 2000){               
-        digitalWrite(cutter, LOW);
+    if (current2 > 1.7 && highcurrent2 == false && millis() - gotime > 5000 && start==true && millis() - mowertime > 2000){               
+         
+        highcurrent2 = true;
         mowertime = millis();
-        
+       
     }
     
-    if (digitalRead(cutter) == LOW && millis() - mowertime > 5000 && start == true){
-      digitalWrite(cutter, HIGH);
-      mowertime = millis();
-      digitalWrite(ledPin, LOW);
+    if ( millis() - mowertime > 1000  && current2 > 1.7 && highcurrent2 == true ){
+     //digitalWrite(ledPin, HIGH);
+       digitalWrite(cutter, LOW);
     }
-  
+    if ( millis() - mowertime >= 8000 && highcurrent2 == true){
+       //digitalWrite(ledPin, LOW);
+      digitalWrite(cutter, HIGH);
+      highcurrent2 = false;
+      mowertime = millis();
+    }
+    
 
 
 }
@@ -312,14 +328,15 @@ void getCoords(){
   {
     
     fix = gps.read();
-    //fence
     getFence();         //kasuta getCoords geofence arvutamiseks    
     //Serial.println(inFence);
-    //fence
+    
     //DEBUG_PORT.print( F("Location: ") );
     if (fix.valid.location)
     {
+
       digitalWrite(ledPin, HIGH);
+     
       y = (fix.latitudeL()); // integer displayco
       //Blynk.virtualWrite(V0, y);
       //DEBUG_PORT.print(y);
@@ -327,10 +344,11 @@ void getCoords(){
       x = (fix.longitudeL()); // integer display
       //Blynk.virtualWrite(V1, x);
       //DEBUG_PORT.println(x);
-    }
-    if(millis() - gpsblink > 500){
-      digitalWrite(ledPin, LOW);
-    }
+    }//if
+    
+      
+    
+    
     /* 
     if (fix.valid.speed) {
       km += fix.speed_kph();
@@ -378,141 +396,200 @@ void stop (){
 }
 
 void turn (){
+  if (direction == 1){
   digitalWrite(fwdright, HIGH); //turn
   digitalWrite(revright, LOW);
   digitalWrite(revleft, HIGH);
   digitalWrite(fwdleft, LOW);
+  } else {
+  digitalWrite(fwdright, LOW); //turn
+  digitalWrite(revright, HIGH);
+  digitalWrite(revleft, LOW);
+  digitalWrite(fwdleft, HIGH);  
+  }
 }
 
 void testcurrent (){
-  if (current > 1 && highcurrent == false){
+  if (current > 1.3 && highcurrent == false){
     amptime = millis(); 
     highcurrent = true;  
   }
 
-  if (current > 1 && millis() - amptime > 1000 && highcurrent == true){
+  if (current > 1.3 && millis() - amptime > 200 && highcurrent == true){
       avoidcurrent = true;
+      highcurrent = false;
+      direction *= -1;
+      resetTimer = false;
   }
+  
+  
 }//test current
+
+//test UH
+void testUH(){
+  if (distance <= 20){
+    avoidUH = true;
+    
+  }
+}
+
+void testfence(){
+  if (inFence == 0){
+    
+    avoidfence = true;
+  }
+}
+
 
 
 
 void moveRobot(){
+
   
+  testUH();
+  testfence();
   testcurrent();
   //Serial.println(current);
 
 //all ok movement
-  if (distance > 19 && avoid == false  && inFence == 1  &&  avoidcurrent == false) {
+//inFence == 1 &&
+ if (current2 > 1.3 && highcurrent2 == false){
+   stop();
+ }
+ else if (avoidcurrent == false && avoidfence == false && avoidUH == false) {
     direction = 1;
     drive();
+    resetTimer = false;
+      resetTimer2 = false;
+      resetTimer3 = false;
+      avoidcurrent = false;
+      avoidUH = false;
+      avoidfence = false;
+      turninfence = false;
   }
 
-// fence trigger
- 
-  else if (inFence == 0 && avoidcurrent == false){
-    if (avoid == false){
-    avoid = true;
-    time = millis(); //and reset time
+///current trigger
+  else if (avoidcurrent == true){
+     
+    if (resetTimer == false){
+      resetTimer = true;
+      time = millis(); //and reset time
     }
-    
     if (millis() - time < 500)
     {
-    stop();
+      stop();
     }
-    if (millis() - time > 500)
-    { //Has 0.5 second passed?
-      direction = -1;
+    if (millis() - time >= 500 && millis() - time < 2500)
+    { //reverse direction
       drive();
-      testcurrent();
     }
-    if (inFence == 1)
+    if (millis() - time >= 2500 && millis() - time < 3000)
     { 
-      avoid = false;
-    }
-  } //if out of fence
-
-
-///UH trigger
-  else if (distance <= 19  && inFence == 1  &&  avoidcurrent == false){
-    if (avoid == false){
-    avoid = true;
-    time = millis(); //and reset time
-    }
-    
-    if (millis() - time < 500)
-    {
-    stop();
-    }
-    if (millis() - time > 500 &&  millis() - time < 4500) //back up 4 sec
-    { //Has 0.5 second passed?
-      direction = -1;
-      drive();
-      testcurrent();
-    }
-    if (millis() - time > 4500 && millis() - time < 5000)
-    { //Has 2 second passed?
       stop();
     }
-    if (millis() - time > 5000 && millis() - time < 9000)
-    { //Has 0.5 second passed?
+    if (millis() - time >= 3000 && millis() - time < 7000)
+    { //reverse direction
       turn();
-      testcurrent();
     }
-    if (millis() - time > 9000 && millis() - time < 9500)
-    { //Has 2 second passed?
+    if (millis() - time >= 7000 && millis() - time < 7500)
+    { //reverse direction
       stop();
     }
-
-    if (millis() - time > 9500)
-    { //Has 2 second passed?
-      avoid = false;
-    }
-  } //if UH trigger
-
-// current trigger
-else if (avoidcurrent == true){
-    if (avoid == false){
-    avoid = true;
-    time = millis(); //and reset time
-    }
-    
-    if (millis() - time < 500)
-    {
-    stop();
-    }
-    if (millis() - time > 500 &&  millis() - time < 4500) // change dir 4 4 sec
-    { //Has 0.5 second passed?
-    if (dirchange == false){
-      direction *= -1;
-      dirchange = true;
-      }
-      drive();
-      testcurrent();
-    }
-    if (millis() - time > 4500 && millis() - time < 5000)
-    { //Has 2 second passed?
-      dirchange = false;
-      stop();
-    }
-    if (millis() - time > 5000 && millis() - time < 9000)
-    { //Has 0.5 second passed?
-      turn();
-      testcurrent();
-    }
-    if (millis() - time > 9000 && millis() - time < 9500)
-    { //Has 2 second passed?
-      stop();
-    }
-
-    if (millis() - time > 9500)
-    { //Has 2 second passed?
-      avoid = false;
+    if (millis() - time >= 7500)
+    { 
+      resetTimer = false;
+      resetTimer2 = false;
+      resetTimer3 = false;
       avoidcurrent = false;
-      highcurrent = false;
+      avoidUH = false;
+      avoidfence = false;
+      turninfence = false;
     }
   } //if current trigger
+///UH trigger
+  else if (avoidUH==true /*&& avoidfence == false */){
+     direction = -1;
+    if (resetTimer2 == false){
+    resetTimer2 = true;
+    time = millis(); //and reset time
+    }
+    if (millis() - time < 500)
+    {
+      stop();
+    }
+    if (millis() - time >= 500 && millis() - time < 2500)
+    { //reverse direction
+      drive();
+    }
+    if (millis() - time >= 2500 && millis() - time < 3000)
+    { 
+      stop();
+    }
+    if (millis() - time >= 3000 && millis() - time < 7000)
+    { //reverse direction
+      turn();
+    }
+    if (millis() - time >= 7000 && millis() - time < 7500)
+    { //reverse direction
+      stop();
+    }
+    if (millis() - time >= 7500)
+    { 
+      resetTimer = false;
+      resetTimer2 = false;
+      resetTimer3 = false;
+      avoidcurrent = false;
+      avoidUH = false;
+      avoidfence = false;
+      turninfence = false;
+    }
+  } //if UH trigger
+// fence trigger
+  else if (avoidfence == true){
+    direction = -1;
+    if (resetTimer3 == false){
+      resetTimer3 = true;
+      time = millis(); //reset time
+    }
+    if (millis() - time < 500 && turninfence == false){
+      stop();
+    }
+    if (millis() - time >= 500 && turninfence == false){ 
+      drive();
+    }
+    if (millis() - time >= 20000 && millis() - time < 27000 && turninfence == false){ 
+      turn();
+    }
 
+    if (inFence == 1 && turninfence == false){ 
+        time = millis(); //reset time
+        turninfence = true;
+    }
+    
+    if (millis() - time < 7500 && turninfence == true){
+    drive();
+    }
+    if (millis() - time >= 7500 && millis() - time < 8000 && turninfence == true){
+    stop();
+    }
+    if (millis() - time >= 8000 && millis() - time < 15000 && turninfence == true){ 
+    turn();
+    }
+    if (millis() - time >= 15000 && millis() - time < 15500 && turninfence == true){
+    stop();
+    }
+    if (millis() - time >= 15500 && turninfence == true){ 
+      resetTimer = false;
+      resetTimer2 = false;
+      resetTimer3 = false;
+      avoidcurrent = false;
+      avoidfence = false;
+      avoidUH = false;
+      turninfence = false;
+    }
+    
+  } //else if out of fence
+ 
 } //move
 
 
