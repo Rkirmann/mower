@@ -123,10 +123,21 @@ float km = 0;
 
 
 
-
+int wire1;
+int wire2;
+int wire3;
+#include <Wire.h>
+void receiveEvent(int howMany) {
+  wire1 = Wire.read();    // receive byte as an integer
+  wire2 = Wire.read();
+  wire3 = Wire.read();
+}
 
 void setup() {
- 
+
+  //WIRE
+ Wire.begin(8);                // join i2c bus with address #8
+  Wire.onReceive(receiveEvent); // register event
   
   
  //pinMode(LED_BUILTIN, OUTPUT);
@@ -204,6 +215,12 @@ void loop()
 {
   
   
+  if (wire == 1)
+   digitalWrite(LED_BUILTIN, HIGH);  
+  if (wire == 0)
+  digitalWrite(LED_BUILTIN, LOW);  
+
+
 
   getDistance(); 
   getCoords();
@@ -233,10 +250,33 @@ void loop()
   }
 
   
-  //start wheels
-  if (millis() - gotime > 10000 && start==true){  
+  //start auto drive
+  if (millis() - gotime > 10000 && start==true && wire1 == 0){  
     moveRobot();         
   }
+
+  //manual drive
+  if (wire1 == 1 && wire2 == 100){
+    direction = 1;
+    turn();
+  }
+  else if (wire1 == 1 && wire2 == 0){
+    direction = -1;
+    turn();
+  }
+  else if (wire1 == 1 && wire3 == 100){
+    direction = 1;
+    drive();
+  }
+  else if (wire1 == 1 && wire3 == 0){
+    direction = -1;
+    drive();
+  }
+  else
+  {
+    stop();
+  }
+  
 
   ////////////////////////////    CUTTER      /////////////////////////////////////////////////
   
@@ -336,7 +376,7 @@ void getCoords(){
     {
 
       digitalWrite(ledPin, HIGH);
-     
+      blinktime = millis();
       y = (fix.latitudeL()); // integer displayco
       //Blynk.virtualWrite(V0, y);
       //DEBUG_PORT.print(y);
@@ -369,6 +409,8 @@ void getCoords(){
 
 
   } //while
+  if (millis() - blinktime > 500)
+      digitalWrite(ledPin, LOW);
 } //getcoords
 
 
@@ -397,12 +439,12 @@ void stop (){
 
 void turn (){
   if (direction == 1){
-  digitalWrite(fwdright, HIGH); //turn
+  digitalWrite(fwdright, HIGH); //turn left
   digitalWrite(revright, LOW);
   digitalWrite(revleft, HIGH);
   digitalWrite(fwdleft, LOW);
   } else {
-  digitalWrite(fwdright, LOW); //turn
+  digitalWrite(fwdright, LOW); //turn right
   digitalWrite(revright, HIGH);
   digitalWrite(revleft, LOW);
   digitalWrite(fwdleft, HIGH);  
