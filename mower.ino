@@ -215,9 +215,9 @@ void loop()
 {
   
   
-  if (wire == 1)
+  if (wire1 == 1)
    digitalWrite(LED_BUILTIN, HIGH);  
-  if (wire == 0)
+  if (wire1 == 0)
   digitalWrite(LED_BUILTIN, LOW);  
 
 
@@ -259,22 +259,27 @@ void loop()
   if (wire1 == 1 && wire2 == 100){
     direction = 1;
     turn();
+    digitalWrite(ledPin, HIGH);
   }
   else if (wire1 == 1 && wire2 == 0){
     direction = -1;
     turn();
+    digitalWrite(ledPin, HIGH);
   }
   else if (wire1 == 1 && wire3 == 100){
     direction = 1;
     drive();
+    digitalWrite(ledPin, HIGH);
   }
   else if (wire1 == 1 && wire3 == 0){
     direction = -1;
     drive();
+    digitalWrite(ledPin, HIGH);
   }
   else
   {
     stop();
+    digitalWrite(ledPin, LOW);
   }
   
 
