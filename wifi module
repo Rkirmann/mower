@@ -65,7 +65,7 @@ BLYNK_WRITE(0) {
      Wire.write(manual);    
      Wire.endTransmission(); 
   }
-  
+} 
 BLYNK_WRITE(1) {
   lr = param.asInt();
   Wire.beginTransmission(8);
